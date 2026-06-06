@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "city-zen-crime-map"
+version = "0.1.0"
+description = "Generador de dashboard HTML para mapa de calor de carpetas FGJ CDMX por código postal."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.0",
+  "geopandas>=0.14",
+  "shapely>=2.0",
+  "pyogrio>=0.7",
+  "rtree>=1.0",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+city-zen-crime-map = "city_zen_crime_map.pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
