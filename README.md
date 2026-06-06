@@ -17,7 +17,8 @@ El dashboard incluye:
 ```text
 .
 ├── notebooks/
-│   └── City_Zen_CDMX_Crime_Heatmap.ipynb
+│   ├── City_Zen_CDMX_Crime_Heatmap.ipynb
+│   └── City_Zen_CDMX_Crime_Centroids_By_CP.ipynb
 ├── src/
 │   └── city_zen_crime_map/
 │       ├── __init__.py
