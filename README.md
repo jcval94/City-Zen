@@ -31,10 +31,10 @@ El dashboard incluye:
 
 1. CSV de carpetas FGJ CDMX, por ejemplo:
    `/content/da_carpetas-de-investigacion-pgj-cdmx.csv`
-2. GeoJSON de códigos postales CDMX de `open-mexico/mexico-geojson`, por ejemplo:
-   `/content/geojson_cp/open_mexico_sepomeX_cdmx.geojson`
+2. GeoJSON de códigos postales CDMX de `open-mexico/mexico-geojson`:
+   `https://github.com/open-mexico/mexico-geojson/blob/main/09-Cdmx.geojson`
 
-El GeoJSON debe contener la columna `d_codigo`. Si el CSV no contiene CP, el pipeline lo asigna mediante cruce espacial usando `latitud` y `longitud`.
+El pipeline acepta directamente el enlace `blob` de GitHub anterior y lo convierte a su URL raw al leerlo. El archivo de `open-mexico` trae geometrías de colonia/SEPOMEX con la columna `d_codigo`; el pipeline normaliza esa columna como `cp` y disuelve todas las geometrías para que el mapa, agregados y cruces espaciales queden **siempre a nivel código postal**, no AGEB ni colonia.
 
 ## Uso en Colab
 
@@ -48,7 +48,7 @@ En la celda de configuración puedes ajustar:
 
 ```python
 INPUT_FILE = Path('/content/da_carpetas-de-investigacion-pgj-cdmx.csv')
-CP_GEOJSON_FILE = Path('/content/geojson_cp/open_mexico_sepomeX_cdmx.geojson')
+CP_GEOJSON_FILE = 'https://github.com/open-mexico/mexico-geojson/blob/main/09-Cdmx.geojson'
 OUTPUT_HTML = Path('/content/city_zen_outputs/cdmx_crime_heatmap.html')
 DATE_COL = None
 EXISTING_CP_COL = None
@@ -61,7 +61,7 @@ Al final se genera y descarga:
 /content/city_zen_outputs/cdmx_crime_heatmap.html
 ```
 
-Si ejecutas `main()` directamente dentro de Colab/Jupyter, ya no necesitas pasar argumentos CLI siempre que antes hayas definido `INPUT_FILE` y `CP_GEOJSON_FILE` en la celda de configuración. `main()` leerá también, cuando existan, `OUTPUT_HTML`, `OUTPUT_DIR`, `DATE_COL`, `EXISTING_CP_COL`, `MONTHS` y `TITLE`.
+Si ejecutas `main()` directamente dentro de Colab/Jupyter, ya no necesitas pasar argumentos CLI siempre que antes hayas definido `INPUT_FILE` en la celda de configuración. `CP_GEOJSON_FILE` es opcional y, si no se define, se usa el enlace de `open-mexico` anterior. `main()` leerá también, cuando existan, `OUTPUT_HTML`, `OUTPUT_DIR`, `DATE_COL`, `EXISTING_CP_COL`, `MONTHS` y `TITLE`.
 
 ```python
 result = main()
@@ -80,7 +80,7 @@ Genera el HTML:
 ```bash
 city-zen-crime-map \
   --input /content/da_carpetas-de-investigacion-pgj-cdmx.csv \
-  --cp-geojson /content/geojson_cp/open_mexico_sepomeX_cdmx.geojson \
+  --cp-geojson https://github.com/open-mexico/mexico-geojson/blob/main/09-Cdmx.geojson \
   --output-html outputs/cdmx_crime_heatmap.html \
   --output-dir outputs \
   --months 6
@@ -89,6 +89,7 @@ city-zen-crime-map \
 Opciones útiles:
 
 - `--date-col`: fuerza una columna de fecha si la autodetección no coincide con tu CSV.
+- `--cp-geojson`: es opcional en CLI y por defecto usa `https://github.com/open-mexico/mexico-geojson/blob/main/09-Cdmx.geojson`.
 - `--existing-cp-col`: usa una columna de CP existente antes de intentar el cruce espacial.
 - `--months`: controla cuántos meses recientes se incluyen.
 

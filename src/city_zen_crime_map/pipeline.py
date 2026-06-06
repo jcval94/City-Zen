@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlparse
 
 import geopandas as gpd
 import pandas as pd
@@ -14,6 +15,15 @@ import pandas as pd
 LAT_COL = "latitud"
 LON_COL = "longitud"
 CP_COL_GEOJSON = "d_codigo"
+DEFAULT_CP_GEOJSON_URL = "https://github.com/open-mexico/mexico-geojson/blob/main/09-Cdmx.geojson"
+CP_COLUMN_CANDIDATES = (
+    CP_COL_GEOJSON,
+    "codigo_postal",
+    "c_codigo",
+    "cp",
+    "CP",
+    "postal_code",
+)
 DEFAULT_DATE_CANDIDATES = (
     "fecha_hechos",
     "FechaHechos",
@@ -89,16 +99,47 @@ def refine_incident_type(row: pd.Series, candidates: Iterable[str] = DEFAULT_CAT
     return "Otros incidentes"
 
 
-def load_postal_polygons(path_geojson: str | Path, cp_col: str = CP_COL_GEOJSON) -> gpd.GeoDataFrame:
-    gdf_cp = gpd.read_file(path_geojson)
-    if cp_col not in gdf_cp.columns:
-        raise ValueError(f"No existe la columna '{cp_col}'. Columnas disponibles: {list(gdf_cp.columns)}")
-    gdf_cp["cp"] = _normalize_cp(gdf_cp[cp_col])
+def _github_blob_to_raw_url(path_geojson: str | Path) -> str:
+    """Convert GitHub blob URLs to raw URLs readable by GeoPandas/Fiona."""
+    path_text = str(path_geojson)
+    parsed = urlparse(path_text)
+    if parsed.netloc.lower() != "github.com":
+        return path_text
+
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) >= 5 and parts[2] == "blob":
+        owner, repo, _, branch, *file_parts = parts
+        raw_path = "/".join(file_parts)
+        return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{raw_path}"
+    return path_text
+
+
+def _resolve_cp_column(gdf_cp: gpd.GeoDataFrame, cp_col: str | None = CP_COL_GEOJSON) -> str:
+    candidates = [cp_col] if cp_col else []
+    candidates.extend(col for col in CP_COLUMN_CANDIDATES if col not in candidates)
+    for candidate in candidates:
+        if candidate in gdf_cp.columns:
+            return candidate
+    raise ValueError(
+        "No encontré una columna de código postal en el GeoJSON. "
+        f"Candidatas: {candidates}. Columnas disponibles: {list(gdf_cp.columns)}"
+    )
+
+
+def load_postal_polygons(path_geojson: str | Path, cp_col: str | None = CP_COL_GEOJSON) -> gpd.GeoDataFrame:
+    """Load lower-level SEPOMEX polygons and aggregate them to one geometry per postal code."""
+    readable_path = _github_blob_to_raw_url(path_geojson)
+    gdf_cp = gpd.read_file(readable_path)
+    resolved_cp_col = _resolve_cp_column(gdf_cp, cp_col)
+    gdf_cp["cp"] = _normalize_cp(gdf_cp[resolved_cp_col])
     gdf_cp = gdf_cp[
         gdf_cp["cp"].notna()
         & gdf_cp["cp"].str.match(r"^\d{5}$", na=False)
         & gdf_cp.geometry.notna()
+        & ~gdf_cp.geometry.is_empty
     ].copy()
+    if gdf_cp.empty:
+        raise ValueError("El GeoJSON no contiene geometrías válidas con códigos postales de 5 dígitos.")
     if gdf_cp.crs is None:
         gdf_cp = gdf_cp.set_crs("EPSG:4326")
     gdf_cp = gdf_cp.to_crs("EPSG:4326")
@@ -353,7 +394,7 @@ def write_dashboard(aggregated: pd.DataFrame, gdf_cp: gpd.GeoDataFrame, html_pat
 
 def build_dashboard(
     input_file: str | Path,
-    cp_geojson_file: str | Path,
+    cp_geojson_file: str | Path = DEFAULT_CP_GEOJSON_URL,
     output_html: str | Path = "outputs/cdmx_crime_heatmap.html",
     output_dir: str | Path = "outputs",
     date_col: str | None = None,
@@ -382,7 +423,11 @@ def build_dashboard(
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Genera dashboard HTML de carpetas FGJ CDMX por CP.")
     parser.add_argument("--input", required=True, help="CSV de carpetas de investigación FGJ CDMX.")
-    parser.add_argument("--cp-geojson", required=True, help="GeoJSON de códigos postales CDMX con columna d_codigo.")
+    parser.add_argument(
+        "--cp-geojson",
+        default=DEFAULT_CP_GEOJSON_URL,
+        help="GeoJSON de códigos postales CDMX; acepta el enlace blob de GitHub de open-mexico/09-Cdmx.geojson.",
+    )
     parser.add_argument("--output-html", default="outputs/cdmx_crime_heatmap.html", help="Ruta del HTML final.")
     parser.add_argument("--output-dir", default="outputs", help="Directorio para CSV intermedios.")
     parser.add_argument("--date-col", default=None, help="Columna de fecha si se desea forzar una específica.")
@@ -402,8 +447,7 @@ def _is_interactive_kernel() -> bool:
 
 def _has_required_cli_args(argv: list[str]) -> bool:
     has_input = any(arg == "--input" or arg.startswith("--input=") for arg in argv)
-    has_cp_geojson = any(arg == "--cp-geojson" or arg.startswith("--cp-geojson=") for arg in argv)
-    return has_input and has_cp_geojson
+    return has_input
 
 
 def _args_from_notebook_config(
@@ -411,8 +455,8 @@ def _args_from_notebook_config(
 ) -> argparse.Namespace | None:
     config = config or globals()
     input_file = config.get("INPUT_FILE")
-    cp_geojson_file = config.get("CP_GEOJSON_FILE")
-    if input_file is None or cp_geojson_file is None:
+    cp_geojson_file = config.get("CP_GEOJSON_FILE", DEFAULT_CP_GEOJSON_URL)
+    if input_file is None:
         return None
 
     argv = ["--input", str(input_file), "--cp-geojson", str(cp_geojson_file)]
@@ -445,8 +489,8 @@ def parse_args(
             if notebook_args is not None:
                 return notebook_args
             raise ValueError(
-                "main() necesita --input y --cp-geojson. "
-                "En notebooks/Colab define INPUT_FILE y CP_GEOJSON_FILE antes de llamar main(), "
+                "main() necesita --input. "
+                "En notebooks/Colab define INPUT_FILE antes de llamar main(); CP_GEOJSON_FILE es opcional, "
                 "o llama build_dashboard(input_file=..., cp_geojson_file=...)."
             )
     return parser.parse_args(cli_argv)
