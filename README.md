@@ -60,6 +60,12 @@ Al final se genera y descarga:
 /content/city_zen_outputs/cdmx_crime_heatmap.html
 ```
 
+Si ejecutas `main()` directamente dentro de Colab/Jupyter, ya no necesitas pasar argumentos CLI siempre que antes hayas definido `INPUT_FILE` y `CP_GEOJSON_FILE` en la celda de configuración. `main()` leerá también, cuando existan, `OUTPUT_HTML`, `OUTPUT_DIR`, `DATE_COL`, `EXISTING_CP_COL`, `MONTHS` y `TITLE`.
+
+```python
+result = main()
+```
+
 ## Uso como CLI
 
 Instala el proyecto en modo editable:
