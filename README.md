@@ -17,7 +17,8 @@ El dashboard incluye:
 ```text
 .
 ├── notebooks/
-│   └── City_Zen_CDMX_Crime_Heatmap.ipynb
+│   ├── City_Zen_CDMX_Crime_Heatmap.ipynb
+│   └── City_Zen_CDMX_Crime_Centroids_By_CP.ipynb
 ├── src/
 │   └── city_zen_crime_map/
 │       ├── __init__.py
@@ -59,6 +60,30 @@ Al final se genera y descarga:
 ```text
 /content/city_zen_outputs/cdmx_crime_heatmap.html
 ```
+
+
+## Notebook de centroides por código postal
+
+Para generar un CSV autocontenido de centroides de crimen por **código postal** y **tipo de crimen**, abre y ejecuta:
+
+```text
+notebooks/City_Zen_CDMX_Crime_Centroids_By_CP.ipynb
+```
+
+El notebook usa K-Means por cada grupo `(cp, tipo_crimen)`, pero prioriza pocos centroides: por defecto genera `1` centroide y solo sube hasta `3` cuando el grupo tiene suficientes eventos y la métrica de silueta mejora de forma clara.
+
+En la celda de configuración puedes ajustar:
+
+```python
+INPUT_FILE = Path('/content/da_carpetas-de-investigacion-pgj-cdmx.csv')
+CP_GEOJSON_FILE = Path('/content/geojson_cp/open_mexico_sepomeX_cdmx.geojson')
+OUTPUT_CSV = Path('/content/city_zen_outputs/centroides_crimen_cp.csv')
+EXISTING_CP_COL = None
+CRIME_TYPE_COL = None
+MAX_CENTROIDS_PER_GROUP = 3
+```
+
+La salida `centroides_crimen_cp.csv` incluye `cp`, `crime_type`, `centroid_id`, coordenadas del centroide, número de eventos, porcentaje del grupo y radios p50/p90 en metros.
 
 ## Uso como CLI
 
