@@ -379,7 +379,7 @@ def build_dashboard(
     return BuildResult(html_path, aggregated_path, assigned_path, missing_path, selected_months, incident_types)
 
 
-def main(argv: list[str] | None = None) -> None:
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Genera dashboard HTML de carpetas FGJ CDMX por CP.")
     parser.add_argument("--input", required=True, help="CSV de carpetas de investigación FGJ CDMX.")
     parser.add_argument("--cp-geojson", required=True, help="GeoJSON de códigos postales CDMX con columna d_codigo.")
@@ -389,7 +389,75 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--existing-cp-col", default=None, help="Columna de CP existente para usar antes del cruce espacial.")
     parser.add_argument("--months", type=int, default=6, help="Número de meses recientes a incluir.")
     parser.add_argument("--title", default="Mapa de calor criminal CDMX por código postal", help="Título del dashboard.")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _is_interactive_kernel() -> bool:
+    try:
+        get_ipython
+    except NameError:
+        return False
+    return get_ipython() is not None
+
+
+def _has_required_cli_args(argv: list[str]) -> bool:
+    has_input = any(arg == "--input" or arg.startswith("--input=") for arg in argv)
+    has_cp_geojson = any(arg == "--cp-geojson" or arg.startswith("--cp-geojson=") for arg in argv)
+    return has_input and has_cp_geojson
+
+
+def _args_from_notebook_config(
+    parser: argparse.ArgumentParser, config: dict[str, object] | None = None
+) -> argparse.Namespace | None:
+    config = config or globals()
+    input_file = config.get("INPUT_FILE")
+    cp_geojson_file = config.get("CP_GEOJSON_FILE")
+    if input_file is None or cp_geojson_file is None:
+        return None
+
+    argv = ["--input", str(input_file), "--cp-geojson", str(cp_geojson_file)]
+    optional_config = (
+        ("OUTPUT_HTML", "--output-html"),
+        ("OUTPUT_DIR", "--output-dir"),
+        ("DATE_COL", "--date-col"),
+        ("EXISTING_CP_COL", "--existing-cp-col"),
+        ("MONTHS", "--months"),
+        ("TITLE", "--title"),
+    )
+    for variable_name, flag in optional_config:
+        value = config.get(variable_name)
+        if value is not None:
+            argv.extend([flag, str(value)])
+    return parser.parse_args(argv)
+
+
+def parse_args(
+    argv: list[str] | None = None, notebook_config: dict[str, object] | None = None
+) -> argparse.Namespace:
+    parser = _build_arg_parser()
+    cli_argv = list(argv) if argv is not None else None
+    if cli_argv is None and _is_interactive_kernel():
+        import sys
+
+        kernel_argv = sys.argv[1:]
+        if not _has_required_cli_args(kernel_argv):
+            notebook_args = _args_from_notebook_config(parser, notebook_config)
+            if notebook_args is not None:
+                return notebook_args
+            raise ValueError(
+                "main() necesita --input y --cp-geojson. "
+                "En notebooks/Colab define INPUT_FILE y CP_GEOJSON_FILE antes de llamar main(), "
+                "o llama build_dashboard(input_file=..., cp_geojson_file=...)."
+            )
+    return parser.parse_args(cli_argv)
+
+
+def main(argv: list[str] | None = None) -> BuildResult:
+    import inspect
+
+    frame = inspect.currentframe()
+    caller_globals = frame.f_back.f_globals if frame and frame.f_back else None
+    args = parse_args(argv, notebook_config=caller_globals)
     result = build_dashboard(
         input_file=args.input,
         cp_geojson_file=args.cp_geojson,
@@ -404,6 +472,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Agregado generado: {result.aggregated_path}")
     print(f"Meses incluidos: {', '.join(result.months)}")
     print(f"Tipos de incidente: {', '.join(result.incident_types)}")
+    return result
 
 
 if __name__ == "__main__":
